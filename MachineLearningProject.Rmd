@@ -1,0 +1,92 @@
+---
+title: "Machine Learning Project"
+author: "DP"
+date: "25/04/2015"
+output: html_document
+---
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways; **A** **B** **C** **D** **E**. The type **A** is the only **correct**. More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset). 
+
+## What we should submit
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. We can use any of the other variables to predict with. We should create a report describing how we built our model, how we used cross validation, what we think the expected out of sample error is, and why we made the choices we did. We will also use our prediction model to predict 20 different test cases. 
+
+## Getting and Cleaning data
+
+First of all I load the two *.csv files. They contains the training set and the 20 cases we will use the model predictor on.
+
+```{r}
+library(caret)
+library(rpart)
+library(rattle)
+library(randomForest)
+
+training<-read.csv("pml-training.csv",header=TRUE,sep=",",na.strings=c("","NA","NULL"))
+testing<-read.csv("pml-testing.csv",header=TRUE,sep=",",na.strings=c("","NA","NULL"))
+```
+
+### Exploratory Data Analysis
+We will use the training set to build and test a model predictor. To better perform these steps we only need useful variables. For example we delete variables where all the observations are Not Available:
+```{r}
+training_clean <- training[, colSums(is.na(training))==FALSE]
+testing_clean <- testing[, colSums(is.na(testing))==FALSE]
+```
+Furthermore we can delete columns that not contain informations on the movements of the users; for example the user names or timestamps...
+
+```{r}
+training_clean <- training_clean[, c(8:60)]
+testing_clean <- testing_clean[, c(8:60)]
+
+dim(training_clean)
+dim(testing_clean)
+```
+
+## Data Slicing
+Accuracy of the model built on the training set will be optimistic; infact a better estimate come from an indipendent set (test set). So we slice training data to perform **Cross Validation** : in other words:  
+1. Take the training data  
+2. Use 75% of the observations to build the model   
+3. Calculate the Accuracy on the remaining 25%  
+```{r}
+inTrain <- createDataPartition(y=training_clean$classe, p=.75, list=FALSE)
+train <- training_clean[inTrain,]
+test <- training_clean[-inTrain,]
+```
+
+## Build a good Prediction Model
+### Decision Trees
+The first model we can use is the **Decision Trees**:
+```{r}
+modFit_tree<-train(classe ~ .,method="rpart",data=train)
+fancyRpartPlot(modFit_tree$finalModel)
+confusionMatrix( predict(modFit_tree, newdata = test) , test$classe)
+```
+The **Accuracy** is too low to accept this model.
+
+### Random Forests
+Another model is **Random Forests**:
+```{r}
+# I tried to use Random Forests with caret package but it never ends
+#modFit_rf<-train(classe ~ .,method="rf",data=train)
+
+# Using the randomForest() function is fast enough: 
+modFit_rf <- randomForest(classe ~ ., data=train)
+CM<-confusionMatrix( predict(modFit_rf, newdata = test) , test$classe)
+CM
+```
+The **Accuracy** is very good; we accept this model to predict the 20 cases.
+
+## Out of sample errors
+The Accuracy is: 
+```{r}
+sum(diag( CM$table )) / sum( CM$table )
+```
+then the out of sample error is:
+```{r}
+1-(sum(diag( CM$table )) / sum( CM$table ))
+```
+
+## Predictions
+Finally we can predict the type of "classe" for the 20 test cases:
+```{r}
+predict(modFit_rf, testing_clean)
+```
